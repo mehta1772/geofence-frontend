@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoGuard - Location Tracking</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .header { text-align: center; margin-bottom: 30px; }
+    .icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 50%;
+      margin: 0 auto 20px;
+      font-size: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    h1 { color: #333; font-size: 28px; margin-bottom: 10px; }
+    .subtitle { color: #666; font-size: 14px; }
+    .status-box {
+      background: #f8f9fa;
+      border-radius: 15px;
+      padding: 25px;
+      margin: 20px 0;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .status-row:last-child { border-bottom: none; }
+    .label { color: #666; font-size: 14px; }
+    .value { color: #333; font-weight: 600; font-size: 14px; }
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .btn-danger { background: #ef4444; color: white; }
+    .alert {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-size: 14px;
+      color: #78350f;
+    }
+    .success { background: #d1fae5; border-left-color: #10b981; color: #065f46; }
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-left: 8px;
+      animation: pulse 2s infinite;
+    }
+    .active { background: #10b981; }
+    .inactive { background: #6b7280; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="icon">📍</div>
+      <h1>GeoGuard Tracking</h1>
+      <p class="subtitle">Share your location with family</p>
+    </div>
+
+    <div id="loading" class="alert">
+      ⏳ Initializing tracking system...
+    </div>
+
+    <div id="error" class="alert hidden" style="background: #fee; border-left-color: #ef4444; color: #991b1b;">
+      ❌ <span id="errorMessage"></span>
+    </div>
+
+    <div id="trackingActive" class="hidden">
+      <div class="alert success">
+        ✓ Location sharing is active
+      </div>
+
+      <div class="status-box">
+        <div class="status-row">
+          <span class="label">Status</span>
+          <span class="value">
+            <span id="statusText">Active</span>
+            <span class="status-dot active" id="statusDot"></span>
+          </span>
+        </div>
+        <div class="status-row">
+          <span class="label">Last Update</span>
+          <span class="value" id="lastUpdate">--</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Latitude</span>
+          <span class="value" id="latitude">--</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Longitude</span>
+          <span class="value" id="longitude">--</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Updates Sent</span>
+          <span class="value" id="updateCount">0</span>
+        </div>
+      </div>
+
+      <button class="btn btn-danger" onclick="stopTracking()">
+        Stop Location Sharing
+      </button>
+
+      <div style="margin-top: 20px; text-align: center; font-size: 12px; color: #666;">
+        <p>Keep this page open to continue sharing</p>
+        <p style="margin-top: 5px;">Updates every 30 seconds</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://geofence-backend-1.onrender.com/api';
+    let trackingInterval;
+    let updateCount = 0;
+    let memberId = '';
+    let trackingToken = '';
+
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    memberId = urlParams.get('id');
+    trackingToken = urlParams.get('token');
+
+    function showError(message) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('error').classList.remove('hidden');
+      document.getElementById('errorMessage').textContent = message;
+    }
+
+    function startTracking() {
+      if (!memberId || !trackingToken) {
+        showError('Invalid tracking link. Please contact your admin.');
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        showError('Geolocation is not supported by your browser');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          document.getElementById('loading').classList.add('hidden');
+          document.getElementById('trackingActive').classList.remove('hidden');
+          
+          sendLocation(position);
+          trackingInterval = setInterval(() => {
+            navigator.geolocation.getCurrentPosition(
+              sendLocation,
+              (error) => console.error('Location error:', error),
+              { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+            );
+          }, 30000);
+        },
+        (error) => {
+          let message = 'Unable to get your location. ';
+          if (error.code === 1) message += 'Please allow location access in your browser settings.';
+          else if (error.code === 2) message += 'Location unavailable.';
+          else message += 'Request timed out.';
+          showError(message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    function sendLocation(position) {
+      const { latitude, longitude, accuracy } = position.coords;
+
+      document.getElementById('latitude').textContent = latitude.toFixed(6);
+      document.getElementById('longitude').textContent = longitude.toFixed(6);
+      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+
+      fetch(`${API_URL}/location/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: memberId,
+          trackingToken: trackingToken,
+          lat: latitude,
+          lng: longitude
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Location sent:', data);
+        updateCount++;
+        document.getElementById('updateCount').textContent = updateCount;
+      })
+      .catch(error => {
+        console.error('Error sending location:', error);
+        document.getElementById('statusText').textContent = 'Error';
+        document.getElementById('statusDot').classList.remove('active');
+        document.getElementById('statusDot').classList.add('inactive');
+      });
+    }
+
+    function stopTracking() {
+      if (confirm('Stop sharing your location?')) {
+        clearInterval(trackingInterval);
+        window.close();
+      }
+    }
+
+    window.addEventListener('beforeunload', (e) => {
+      if (trackingInterval) {
+        e.preventDefault();
+        e.returnValue = 'Location sharing is active. Leave?';
+      }
+    });
+
+    // Start automatically
+    startTracking();
+  </script>
+</body>
+</html>
