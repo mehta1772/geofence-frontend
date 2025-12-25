@@ -106,7 +106,7 @@ function Dashboard({ user, onLogout, token }) {
       return;
     }
 
-    if (!confirm('Use your current device location as home location?')) {
+    if (!window.confirm('Use your current device location as home location?')) {
       return;
     }
 
